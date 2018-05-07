@@ -1,4 +1,4 @@
-plugin-opencart
+OpenCart LiqPay Checkout Plugin (Fixed)
 ===============
 
 LiqPay Checkout plugin for opencart CMS since 2.x
