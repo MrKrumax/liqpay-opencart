@@ -32,6 +32,10 @@ class ControllerExtensionPaymentLiqPayCheckout extends Controller
     private $version = 3;
     private $action = 'pay';
 
+    private $_sandbox = 0; // 0 or 1
+    private $_language = 'ru'; //Язык клиента ru, uk, en. 
+    private $_pay_way = 'card'; //В Настройках магазина
+
     public function index()
     {
         $this->load->language('extension/payment/liqpay_checkout');
@@ -43,7 +47,7 @@ class ControllerExtensionPaymentLiqPayCheckout extends Controller
         // Collect info about the order to be sent to the API
 
         $description = $this->language->get('text_order_number') . $order_id;
-        $result_url = $this->url->link('checkout/success', '', 'SSL');
+        $result_url = $this->url->link('extension/payment/liqpay_checkout/result', '', 'SSL');
         $server_url = $this->url->link('extension/payment/liqpay_checkout/callback', '', 'SSL');
         $private_key = $this->config->get('liqpay_checkout_private_key');
         $public_key = $this->config->get('liqpay_checkout_public_key');
@@ -58,17 +62,16 @@ class ControllerExtensionPaymentLiqPayCheckout extends Controller
             false
         );
 
-        $pay_way = $this->config->get('liqpay_checkout_pay_way');
-        $language = $this->config->get('liqpay_checkout_language');
 
         $send_data = array('version' => $this->version,
             'public_key' => $public_key,
+            'sandbox' => $this->_sandbox,
             'amount' => $amount,
             'currency' => $currency,
             'description' => $description,
             'order_id' => $order_id,
             'action' => $this->action,
-            'language' => $language,
+            'language' => $this->_language,
             'server_url' => $server_url,
             'result_url' => $result_url);
 
@@ -101,6 +104,56 @@ class ControllerExtensionPaymentLiqPayCheckout extends Controller
             $this->load->model('checkout/order');
             $this->model_checkout_order->addOrderHistory($order_id, $this->config->get('liqpay_checkout_order_status_id'));
             //here you can update your order status
+        }
+    }
+
+    public function result() {
+        
+        if ( isset($this->session->data['order_id']) && ( ! empty($this->session->data['order_id']))  ) {
+            
+            require_once __DIR__ . '/LiqPay.class.php';
+
+            $private_key = $this->config->get('liqpay_checkout_private_key');
+            $public_key = $this->config->get('liqpay_checkout_public_key');
+
+            // https://github.com/liqpay/sdk-php
+            $liqpay = new LiqPay($public_key, $private_key);
+            
+            $res = $liqpay->api("request", array(
+                'action'        => 'status',
+                'version'       => $this->version,
+                'order_id'      => $this->session->data['order_id']
+            ));
+
+            // https://www.liqpay.ua/documentation/api/information/status/doc
+
+            if (isset($res->status)) {
+
+                if ($res->status == 'success') {
+                    
+                    $return_url = $this->url->link('checkout/success');
+
+                } elseif ($res->status == 'failure') {
+                    
+                    $return_url = $this->url->link('checkout/failure');
+
+                } elseif ($res->status == 'sandbox') {
+                    
+                    // print response data 
+                    pp($this->session->data['order_id'], $res);
+                    exit;
+
+                } else {
+                    
+                    $return_url = $this->url->link('checkout/checkout');
+                }
+
+                $this->response->redirect($return_url);
+                exit;
+
+            } else {
+                echo 'The response from liqpay can\'t be parsed. Contact site administrator, please!';
+            }
         }
     }
 }
